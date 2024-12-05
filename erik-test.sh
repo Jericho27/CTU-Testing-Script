@@ -7,6 +7,8 @@ compile_flag=1 # Flag to enable/disable compilation (1 = compile, 0 = no compile
 help_flag=0
 compile_only_flag=0 # Flag for compile only
 
+compiler="g++"
+
 # Help message function
 show_help() {
     echo "Usage: $0 [-v] [-t] [-n] [-h] [-c] <file_name> <datapub_directory>
@@ -19,6 +21,23 @@ Options:
   -c    Compile only (no testing, just compilation)."
     exit 0
 }
+
+for arg in "$@"; do
+    case $arg in
+        --compiler)
+            val=$2
+            set -- "${@//${val}/}"
+            compiler="$val"
+            ;;
+        --help)
+            show_help
+            exit 0
+            ;;
+        *)
+            ;;
+    esac
+done
+set -- "${@//--*/}"
 
 # Parse options using getopts
 while getopts "vtnhc" opt; do
@@ -53,6 +72,11 @@ fi
 # Shift the arguments so that positional arguments (file and directory) remain
 shift $((OPTIND-1))
 
+# Remove arguments that are empty (because of set for --args)
+while [ "$1" == "" ]; do
+    shift 1;
+done
+
 # Check if at least one positional argument is provided (file name)
 if [ $# -lt 1 ]; then
     echo "Error: Missing required arguments."
@@ -60,14 +84,24 @@ if [ $# -lt 1 ]; then
 fi
 
 # Store the base file name (without extension) from the remaining arguments
-file_name=$1
-
-# Set the full file name (with .cpp extension) for compilation
-file_name_with_ext="${file_name}.cpp"
+file_name_with_ext="$1"
+file_name="$(echo "$file_name_with_ext" | sed -E "s|\.[^\s]*||")"
 
 # Compile the program if the compile_flag is set
 if [ $compile_flag -eq 1 ]; then
-    g++ -std=c++14 -pipe -Wall -O3 "$file_name_with_ext" -o "$file_name" && echo "Compilation successful."
+
+    ext=$(echo "$file_name_with_ext" | grep -Eo "\.[cp]+")
+    if [ "$ext" == ".c" ]; then
+        compiler="clang"
+    elif [ "$ext" == ".cpp" ]; then
+        compiler="g++"
+    fi
+
+    if [ "$compiler" = "clang" ]; then
+        "$compiler" -pipe -Wall -O3 "$file_name_with_ext" -o "$file_name" && echo "Compilation successful."
+    else
+        "$compiler" -std=c++14 -pipe -Wall -O3 "$file_name_with_ext" -o "$file_name" && echo "Compilation successful."
+    fi
 
     # Check if compilation was successful
     if [ $? -ne 0 ]; then
